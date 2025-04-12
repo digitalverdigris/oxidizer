@@ -6,57 +6,14 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "shader.hpp"
+
 #define WIDTH 640
 #define HEIGHT 480
 
 //shader paths
 const char *VERTEX_SHADER_PATH = "shaders/vert.glsl";
 const char *FRAGMENT_SHADER_PATH = "shaders/frag.glsl";
-
-unsigned int load_shader(const char *vertex_path, const char *fragment_path)
-{
-    unsigned int ID;
-    std::string vertex_code, fragment_code;
-
-    std::ifstream v_shader_file, f_shader_file;
-
-    v_shader_file.open(vertex_path);
-    f_shader_file.open(fragment_path);
-
-    std::stringstream v_shader_stream, f_shader_stream;
-
-    v_shader_stream << v_shader_file.rdbuf();
-    f_shader_stream << f_shader_file.rdbuf();
-
-    v_shader_file.close();
-    f_shader_file.close();
-
-    vertex_code = v_shader_stream.str();
-    fragment_code = f_shader_stream.str();
-
-    const char* v_shader_code = vertex_code.c_str();
-    const char *f_shader_code = fragment_code.c_str();
-
-    unsigned int vertex, fragment;
-
-    vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &v_shader_code, NULL);
-    glCompileShader(vertex);
-    // fragment Shader
-    fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &f_shader_code, NULL);
-    glCompileShader(fragment);
-    // shader Program
-    ID = glCreateProgram();
-    glAttachShader(ID, vertex);
-    glAttachShader(ID, fragment);
-    glLinkProgram(ID);
-    // delete the shaders as they're linked into our program now and no longer necessary
-    glDeleteShader(vertex);
-    glDeleteShader(fragment);
-
-    return ID;
-}
 
 // key callback script
 void key_callback(GLFWwindow *window)
@@ -113,7 +70,7 @@ int main()
     }
     std::cout << "GLAD initialized";
 
-    unsigned int shader_id = load_shader(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH);
+    shader shader_id{VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH};
 
     // triangle vertices
     float vertices[9] =
@@ -148,7 +105,7 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT);
 
         // draw triangle
-        glUseProgram(shader_id);
+        shader_id.use();
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
@@ -160,8 +117,7 @@ int main()
     // cleanup
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteProgram(shader_id);
-
+    
     // terminate GLFW
     std::cout << "terminating GLFW..." << std::endl;
     glfwTerminate();
