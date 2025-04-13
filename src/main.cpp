@@ -8,24 +8,29 @@
 
 #include "shader.hpp"
 
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 400
+#define HEIGHT 400
 
 //shader paths
 const char *VERTEX_SHADER_PATH = "shaders/vert.glsl";
 const char *FRAGMENT_SHADER_PATH = "shaders/frag.glsl";
+
+const char *FB_VERTEX_SHADER_PATH = "shaders/framebuffer_vert.glsl";
+const char *FB_FRAGMENT_SHADER_PATH = "shaders/framebuffer_frag.glsl";
+
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+{
+    // make sure the viewport matches the new window dimensions; note that width and
+    // height will be significantly larger than specified on retina displays.
+    glViewport(0, 0, width, height);
+}
 
 // key callback script
 void key_callback(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-}
-
-// window resize script
-void framebuffer_size_callback(GLFWwindow *window, int width, int height)
-{
-    glViewport(0, 0, WIDTH, HEIGHT);
 }
 
 int main()
@@ -43,14 +48,16 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
 #endif
     std::cout << "window hints passed!" << std::endl;
 
     // creating a window
     std::cout << "creating a GLFW window..." << std::endl;
-    GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "verdigris engine", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "", NULL, NULL);
     if (window == NULL)
     {
         std::cout << "failed to create GLFW window" << std::endl;
@@ -68,20 +75,36 @@ int main()
         std::cout << "GLAD initialization failed!" << std::endl;
         return -1;
     }
-    std::cout << "GLAD initialized";
+    std::cout << "GLAD initialized" << std::endl;
 
-    shader shader_id{VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH};
+    glEnable(GL_DEPTH_TEST);
+
+    shader program{VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH};
+    shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
 
     // triangle vertices
-    float vertices[9] =
+    float vertices[] =
     {
-        -0.5f, -0.5f, 0.0f,
-         0.0f,  0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f
+        -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+         0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+         0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f
+    };
+
+    float quad_vertices[] = 
+    {
+        // positions   // tex_coords
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+
+        -1.0f,  1.0f,  0.0f, 1.0f,
+         1.0f, -1.0f,  1.0f, 0.0f,
+         1.0f,  1.0f,  1.0f, 1.0f
     };
 
     // create vertex array and vertex buffer array
     unsigned int VAO, VBO;
+
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
 
@@ -92,8 +115,51 @@ int main()
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
 
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
+
+    unsigned int quadVAO, quadVBO;
+
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), &quad_vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+
+    fb_program.use();
+    fb_program.set_int("screen_texture", 0);
+
+    unsigned int FBO;
+    glGenFramebuffers(1, &FBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+
+    unsigned int texture_colorbuffer;
+    glGenTextures(1, &texture_colorbuffer);
+    glBindTexture(GL_TEXTURE_2D, texture_colorbuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_colorbuffer, 0);
+
+    unsigned int RBO;
+    glGenRenderbuffers(1, &RBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, WIDTH, HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
     // render loop
     while (!glfwWindowShouldClose(window))
     {
@@ -101,13 +167,31 @@ int main()
         key_callback(window);
 
         // clear screen
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
-        // draw triangle
-        shader_id.use();
+        glEnable(GL_DEPTH_TEST);
+
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // draw triangle to framebuffer
+        program.use();
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDisable(GL_DEPTH_TEST);
+
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+
+        //draw framebuffer
+        fb_program.use();
+        glBindVertexArray(quadVAO);
+        glBindTexture(GL_TEXTURE_2D, texture_colorbuffer); 
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         // swap buffers and poll events
         glfwSwapBuffers(window);
@@ -117,9 +201,10 @@ int main()
     // cleanup
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    
+
     // terminate GLFW
     std::cout << "terminating GLFW..." << std::endl;
     glfwTerminate();
     std::cout << "GLFW terminated!" << std::endl;
 }
+
