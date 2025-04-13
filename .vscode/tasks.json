@@ -15,6 +15,7 @@
                 "OpenGL",
                 "./src/main.cpp",
                 "./src/shader.cpp",
+                "./src/cube.cpp",
                 "./lib/glad.c",
                 "-o",
                 "build/oxidizer"

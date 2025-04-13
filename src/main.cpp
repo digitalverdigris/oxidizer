@@ -2,16 +2,18 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <vector>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include "shader.hpp"
+#include "cube.hpp"
 
-#define RENDER_WIDTH 10
-#define RENDER_HEIGHT 10
+#define RENDER_WIDTH 100
+#define RENDER_HEIGHT 100
 
-#define SCALE 30
+#define SCALE 6
 
 #define SCREEN_WIDTH (RENDER_WIDTH * SCALE)
 #define SCREEN_HEIGHT (RENDER_HEIGHT * SCALE)
@@ -87,14 +89,6 @@ int main()
     shader program{VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH};
     shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
 
-    // triangle vertices
-    float vertices[] =
-    {
-        -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-         0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
-         0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f
-    };
-
     float quad_vertices[] = 
     {
         // positions   // tex_coords
@@ -106,24 +100,6 @@ int main()
          1.0f, -1.0f,  1.0f, 0.0f,
          1.0f,  1.0f,  1.0f, 1.0f
     };
-
-    // create vertex array and vertex buffer array
-    unsigned int VAO, VBO;
-
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    // bind vertex buffer and vertex array
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
 
     unsigned int quadVAO, quadVBO;
 
@@ -165,6 +141,12 @@ int main()
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     
+    std::vector<cube> cubes;
+
+    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f,  0.0f, -10.0f)});
+    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f, -2.0f, -10.0f)});
+    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f,  2.0f, -10.0f)});
+
     // render loop
     while (!glfwWindowShouldClose(window))
     {
@@ -180,32 +162,24 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // draw triangle to framebuffer
-        program.use();
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        glBindVertexArray(0);
+        // draw cube to framebuffer
 
+        for (cube a_cube : cubes)
+        {
+            a_cube.draw();
+        };
+
+        glBindVertexArray(0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glBlitFramebuffer(
             0, 0, RENDER_WIDTH, RENDER_HEIGHT,
             0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
             GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-        //draw framebuffer
-        fb_program.use();
-        glBindVertexArray(quadVAO);
-        glBindTexture(GL_TEXTURE_2D, texture_colorbuffer); 
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
         // swap buffers and poll events
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-
-    // cleanup
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
 
     // terminate GLFW
     std::cout << "terminating GLFW..." << std::endl;
