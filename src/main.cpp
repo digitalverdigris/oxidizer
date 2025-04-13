@@ -8,8 +8,13 @@
 
 #include "shader.hpp"
 
-#define WIDTH 400
-#define HEIGHT 400
+#define RENDER_WIDTH 10
+#define RENDER_HEIGHT 10
+
+#define SCALE 30
+
+#define SCREEN_WIDTH (RENDER_WIDTH * SCALE)
+#define SCREEN_HEIGHT (RENDER_HEIGHT * SCALE)
 
 //shader paths
 const char *VERTEX_SHADER_PATH = "shaders/vert.glsl";
@@ -57,7 +62,7 @@ int main()
 
     // creating a window
     std::cout << "creating a GLFW window..." << std::endl;
-    GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "", NULL, NULL);
     if (window == NULL)
     {
         std::cout << "failed to create GLFW window" << std::endl;
@@ -146,15 +151,15 @@ int main()
     unsigned int texture_colorbuffer;
     glGenTextures(1, &texture_colorbuffer);
     glBindTexture(GL_TEXTURE_2D, texture_colorbuffer);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WIDTH, HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, RENDER_WIDTH, RENDER_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_colorbuffer, 0);
 
     unsigned int RBO;
     glGenRenderbuffers(1, &RBO);
     glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, WIDTH, HEIGHT);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, RENDER_WIDTH, RENDER_HEIGHT);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
@@ -167,6 +172,7 @@ int main()
         key_callback(window);
 
         // clear screen
+        glViewport(0, 0, RENDER_WIDTH, RENDER_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
         glEnable(GL_DEPTH_TEST);
@@ -180,12 +186,11 @@ int main()
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glBindVertexArray(0);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDisable(GL_DEPTH_TEST);
-
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(
+            0, 0, RENDER_WIDTH, RENDER_HEIGHT,
+            0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+            GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
         //draw framebuffer
         fb_program.use();
