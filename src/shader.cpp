@@ -64,19 +64,19 @@ void shader::use()
     glUseProgram(program);
 }
 
-void shader::set_mat4(const glm::mat4 &var, const std::string &loc) const
+void shader::set_mat4(const std::string &loc, const glm::mat4 &var) const
 {
     // set a mat4 uniform
     glUniformMatrix4fv(glGetUniformLocation(program, loc.c_str()), 1, GL_FALSE, &var[0][0]);
 }
 
-void shader::set_vec3(const glm::vec3 &var, const std::string &loc) const
+void shader::set_vec3(const std::string &loc, const glm::vec3 &var) const
 {
     // set a vec3 uniform
     glUniform3fv(glGetUniformLocation(program, loc.c_str()), 1, &var[0]);
 }
 
-void shader::set_int(const int, const std::string &loc) const
+void shader::set_int(const std::string &loc, const int) const
 {
     // set an int uniform
     glUniform1i(glGetUniformLocation(program, loc.c_str()), 0);

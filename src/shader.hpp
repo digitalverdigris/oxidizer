@@ -24,13 +24,13 @@ public:
     void use();
 
     // to set mat4 uniforms
-    void set_mat4(const glm::mat4 &var, const std::string &loc) const;
+    void set_mat4(const std::string &loc, const glm::mat4 &var) const;
 
     // to set vec3 uniforms
-    void set_vec3(const glm::vec3 &var, const std::string &loc) const;
+    void set_vec3(const std::string &loc, const glm::vec3 &var) const;
 
     // to set int uniforms
-    void set_int(const int var, const std::string &loc) const;
+    void set_int(const std::string &loc, const int var) const;
 
 private:
 
