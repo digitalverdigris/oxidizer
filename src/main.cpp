@@ -11,10 +11,10 @@
 #include "cube.hpp"
 #include "light.hpp"
 
-#define RENDER_WIDTH 100
-#define RENDER_HEIGHT 100
+#define RENDER_WIDTH 200
+#define RENDER_HEIGHT 200
 
-#define SCALE 6
+#define SCALE 3
 
 #define SCREEN_WIDTH (RENDER_WIDTH * SCALE)
 #define SCREEN_HEIGHT (RENDER_HEIGHT * SCALE)
@@ -96,9 +96,9 @@ int main()
 
     std::vector<cube> cubes;
 
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 0.0f,  2.5f, -10.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 0.0f,  2.0f, -5.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
     cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f, -2.0f, -10.0f), glm::vec3(0.0f, 1.0f, 0.0f)});
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f, -2.0f, -10.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f, -2.0f, -15.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
 
     shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
 
@@ -173,9 +173,11 @@ int main()
 
         light a_light{l_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0, 0.0f, -10.0f), glm::vec3(1.0f)};
 
+        glm::vec3 view_pos{0.0f, 0.0f, -3.0f};
+
         for (cube a_cube : cubes)
         {
-            a_cube.draw(a_light.get_color());
+            a_cube.draw(a_light.get_color(), a_light.get_pos(), view_pos);
         };
 
         a_light.draw();

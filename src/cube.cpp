@@ -13,15 +13,20 @@ cube::cube(shader &a_shader, int r_width, int r_height, glm::vec3 a_pos, glm::ve
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+    
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
 }
 
-void cube::draw(glm::vec3 &light_color)
+void cube::draw(glm::vec3 &light_color, glm::vec3 &light_pos, glm::vec3 &view_pos)
 {
     c_shader.use();
 
     c_shader.set_vec3("object_color", color);
     c_shader.set_vec3("light_color", light_color);
+    c_shader.set_vec3("light_pos", light_pos);
+    c_shader.set_vec3("view_pos", view_pos);
 
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = glm::mat4(1.0f);
@@ -40,4 +45,5 @@ void cube::draw(glm::vec3 &light_color)
 
     glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
 }
