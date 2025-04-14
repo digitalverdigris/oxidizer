@@ -9,6 +9,7 @@
 
 #include "shader.hpp"
 #include "cube.hpp"
+#include "light.hpp"
 
 #define RENDER_WIDTH 100
 #define RENDER_HEIGHT 100
@@ -19,8 +20,11 @@
 #define SCREEN_HEIGHT (RENDER_HEIGHT * SCALE)
 
 //shader paths
-const char *VERTEX_SHADER_PATH = "shaders/vert.glsl";
-const char *FRAGMENT_SHADER_PATH = "shaders/frag.glsl";
+const char *LIGHT_VERTEX_SHADER_PATH = "shaders/light_vert.glsl";
+const char *LIGHT_FRAGMENT_SHADER_PATH = "shaders/light_frag.glsl";
+
+const char *CUBE_VERTEX_SHADER_PATH = "shaders/cube_vert.glsl";
+const char *CUBE_FRAGMENT_SHADER_PATH = "shaders/cube_frag.glsl";
 
 const char *FB_VERTEX_SHADER_PATH = "shaders/framebuffer_vert.glsl";
 const char *FB_FRAGMENT_SHADER_PATH = "shaders/framebuffer_frag.glsl";
@@ -86,7 +90,16 @@ int main()
 
     glEnable(GL_DEPTH_TEST);
 
-    shader program{VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH};
+    shader l_program{LIGHT_VERTEX_SHADER_PATH, LIGHT_FRAGMENT_SHADER_PATH};
+
+    shader c_program{CUBE_VERTEX_SHADER_PATH, CUBE_FRAGMENT_SHADER_PATH};
+
+    std::vector<cube> cubes;
+
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 0.0f,  2.5f, -10.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f, -2.0f, -10.0f), glm::vec3(0.0f, 1.0f, 0.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f, -2.0f, -10.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
+
     shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
 
     float quad_vertices[] = 
@@ -141,12 +154,6 @@ int main()
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     
-    std::vector<cube> cubes;
-
-    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f,  0.0f, -10.0f)});
-    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f, -2.0f, -10.0f)});
-    cubes.push_back(cube{program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0f,  2.0f, -10.0f)});
-
     // render loop
     while (!glfwWindowShouldClose(window))
     {
@@ -164,17 +171,23 @@ int main()
 
         // draw cube to framebuffer
 
+        light a_light{l_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0, 0.0f, -10.0f), glm::vec3(1.0f)};
+
         for (cube a_cube : cubes)
         {
-            a_cube.draw();
+            a_cube.draw(a_light.get_color());
         };
+
+        a_light.draw();
 
         glBindVertexArray(0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBlitFramebuffer(
+        glBlitFramebuffer
+        (
             0, 0, RENDER_WIDTH, RENDER_HEIGHT,
             0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
-            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            GL_COLOR_BUFFER_BIT, GL_NEAREST
+        );
 
         // swap buffers and poll events
         glfwSwapBuffers(window);

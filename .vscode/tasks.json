@@ -16,6 +16,7 @@
                 "./src/main.cpp",
                 "./src/shader.cpp",
                 "./src/cube.cpp",
+                "./src/light.cpp",
                 "./lib/glad.c",
                 "-o",
                 "build/oxidizer"
