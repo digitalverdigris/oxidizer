@@ -32,12 +32,14 @@ void cube::draw(glm::vec3 &light_color, glm::vec3 &light_pos, glm::vec3 &view_po
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 projection = glm::mat4(1.0f);
 
+    model = glm::scale(model, glm::vec3(32.0f));
     model = glm::translate(model, pos);
-    model = glm::rotate(model, (float)glfwGetTime(), glm::vec3(0.5f, 1.0f, 0.0f));
+    //model = glm::rotate(model, (float)glfwGetTime(), glm::vec3(0.5f, 1.0f, 0.0f));
 
-    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-    
-    projection = glm::perspective(glm::radians(45.0f), (float)render_width / (float)render_height, 0.1f, 100.0f);
+    view = glm::lookAt(view_pos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    //projection = glm::perspective(glm::radians(45.0f), (float)render_width / (float)render_height, 0.1f, 100.0f);
+    projection = glm::ortho(-(float)render_width / 2, (float)render_width / 2, -(float)render_height / 2, (float)render_height / 2, -100.0f, 100.0f);
 
     c_shader.set_mat4("model", model);
     c_shader.set_mat4("view", view);

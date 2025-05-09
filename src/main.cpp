@@ -11,8 +11,8 @@
 #include "cube.hpp"
 #include "light.hpp"
 
-#define RENDER_WIDTH 200
-#define RENDER_HEIGHT 200
+#define RENDER_WIDTH 320
+#define RENDER_HEIGHT 180
 
 #define SCALE 3
 
@@ -38,10 +38,32 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 }
 
 // key callback script
-void key_callback(GLFWwindow *window)
+void key_callback(GLFWwindow *window, glm::vec3 &view_pos, float &angle, light a_light)
 {
+    int rad = 3;
+
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    {
+        angle += 1;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    {
+        angle -= 1;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        a_light.translate(glm::vec3(0.0f, 0.0f, 100.0f));
+    }   
+
+    view_pos.x = rad * std::cos(glm::radians(angle));
+    view_pos.z = rad * std::sin(glm::radians(angle));
+    view_pos.y = rad;
+    
 }
 
 int main()
@@ -96,9 +118,9 @@ int main()
 
     std::vector<cube> cubes;
 
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 0.0f,  2.0f, -5.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f, -2.0f, -10.0f), glm::vec3(0.0f, 1.0f, 0.0f)});
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f, -2.0f, -15.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f,  0.0f,  2.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f,  0.0f, -2.0f), glm::vec3(0.0f, 1.0f, 0.0f)});
+    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f,  0.0f,  2.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
 
     shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
 
@@ -153,12 +175,18 @@ int main()
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    
+
+    glm::vec3 view_pos{3.0f, 3.0f, 3.0f};
+
+    float angle{0.0f};
+
+    light a_light{l_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0, 0.0f, 0.0f), glm::vec3(1.0f)};
+
     // render loop
     while (!glfwWindowShouldClose(window))
     {
         // process inputs
-        key_callback(window);
+        key_callback(window, view_pos, angle, a_light);
 
         // clear screen
         glViewport(0, 0, RENDER_WIDTH, RENDER_HEIGHT);
@@ -170,17 +198,12 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // draw cube to framebuffer
-
-        light a_light{l_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0, 0.0f, -10.0f), glm::vec3(1.0f)};
-
-        glm::vec3 view_pos{0.0f, 0.0f, -3.0f};
-
         for (cube a_cube : cubes)
         {
             a_cube.draw(a_light.get_color(), a_light.get_pos(), view_pos);
         };
 
-        a_light.draw();
+        a_light.draw(view_pos);
 
         glBindVertexArray(0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);

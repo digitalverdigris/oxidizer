@@ -8,6 +8,7 @@
             "args": [
                 "-std=c++17",
                 "-Wall",
+                "-fsanitize=address",
                 "-I./include",
                 "-lglfw",
                 "-lassimp",
@@ -28,7 +29,6 @@
             "problemMatcher": [
                 "$gcc"
             ],
-            "detail": "builds the game"
         }
     ]
 }
