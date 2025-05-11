@@ -1,227 +1,243 @@
-#include <string>
-#include <fstream>
-#include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <vulkan/vulkan.hpp>
 #include <iostream>
 #include <vector>
 
-#include <glad/glad.h>
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "shader.hpp"
-#include "cube.hpp"
-#include "light.hpp"
+#define WINDOW_WIDTH 600
+#define WINDOW_HEIGHT 600
 
-#define RENDER_WIDTH 320
-#define RENDER_HEIGHT 180
+#define DEBUG true
 
-#define SCALE 3
+GLFWwindow *window = nullptr;
 
-#define SCREEN_WIDTH (RENDER_WIDTH * SCALE)
-#define SCREEN_HEIGHT (RENDER_HEIGHT * SCALE)
-
-//shader paths
-const char *LIGHT_VERTEX_SHADER_PATH = "shaders/light_vert.glsl";
-const char *LIGHT_FRAGMENT_SHADER_PATH = "shaders/light_frag.glsl";
-
-const char *CUBE_VERTEX_SHADER_PATH = "shaders/cube_vert.glsl";
-const char *CUBE_FRAGMENT_SHADER_PATH = "shaders/cube_frag.glsl";
-
-const char *FB_VERTEX_SHADER_PATH = "shaders/framebuffer_vert.glsl";
-const char *FB_FRAGMENT_SHADER_PATH = "shaders/framebuffer_frag.glsl";
-
-
-void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-    // make sure the viewport matches the new window dimensions; note that width and
-    // height will be significantly larger than specified on retina displays.
-    glViewport(0, 0, width, height);
+    if ((key == GLFW_KEY_ESCAPE) && (action == GLFW_PRESS))
+    {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
 }
 
-// key callback script
-void key_callback(GLFWwindow *window, glm::vec3 &view_pos, float &angle, light a_light)
+bool check_extensions(std::vector<const char *> &extensions)
 {
-    int rad = 3;
 
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
+    std::vector<vk::ExtensionProperties> supported_extensions = vk::enumerateInstanceExtensionProperties();
 
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    if (DEBUG)
     {
-        angle += 1;
+        std::cout << "supported extensions:\n";
+        for (vk::ExtensionProperties supported_extension : supported_extensions)
+        {
+            std::cout << '\t' << supported_extension.extensionName << '\n';
+        }
+
+        std::cout << "requested extensions:\n";
+        for (const char *extension : extensions)
+        {
+            std::cout << '\t' << extension << '\n';
+        }
     }
 
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    bool found;
+
+    for (const char *extension : extensions)
     {
-        angle -= 1;
+        found = false;
+        for (vk::ExtensionProperties supported_extension : supported_extensions)
+        {
+            if (strcmp(extension, supported_extension.extensionName) == 0)
+            {
+                found = true;
+                std::cout << "extension \"" << extension << "\" is supported!\n";
+            }
+        }
+        if (!found)
+        {
+            std::cout << "extension \"" << extension << "\" is not supported!\n";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool check_layers(std::vector<const char *> &layers)
+{
+
+    std::vector<vk::LayerProperties> supported_layers = vk::enumerateInstanceLayerProperties();
+
+    if (DEBUG)
+    {
+        std::cout << "supported extensions:\n";
+        for (vk::LayerProperties supported_layer : supported_layers)
+        {
+            std::cout << '\t' << supported_layer.layerName << '\n';
+        }
+
+        std::cout << "requested extensions:\n";
+        for (const char *layer : layers)
+        {
+            std::cout << '\t' << layer << '\n';
+        }
     }
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-    {
-        a_light.translate(glm::vec3(0.0f, 0.0f, 100.0f));
-    }   
+    bool found;
 
-    view_pos.x = rad * std::cos(glm::radians(angle));
-    view_pos.z = rad * std::sin(glm::radians(angle));
-    view_pos.y = rad;
-    
+    for (const char *layer : layers)
+    {
+        found = false;
+        for (vk::LayerProperties supported_layer : supported_layers)
+        {
+            if (strcmp(layer, supported_layer.layerName) == 0)
+            {
+                found = true;
+                std::cout << "extension \"" << layer << "\" is supported!\n";
+            }
+        }
+        if (!found)
+        {
+            std::cout << "extension \"" << layer << "\" is not supported!\n";
+            return false;
+        }
+    }
+    return true;
 }
 
 int main()
 {
-    // GLFW initialization
-    std::cout << "initializing GLFW..." << std::endl;
+    //GLFW SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "glfw setup in progress...\n";
+    }
+
+    //initialize glfw
     if (!glfwInit())
     {
-        std::cout << "GLFW initialization failed!" << std::endl;
-        return -1;
+        throw std::runtime_error("GLFW initalization failed!\n");
     }
-    std::cout << "GLFW initialized!" << std::endl;
 
-    // GLFW window hints
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
-#endif
-    std::cout << "window hints passed!" << std::endl;
-
-    // creating a window
-    std::cout << "creating a GLFW window..." << std::endl;
-    GLFWwindow *window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "", NULL, NULL);
-    if (window == NULL)
+    //check if Vulkan is supported
+    if (!glfwVulkanSupported())
     {
-        std::cout << "failed to create GLFW window" << std::endl;
+        throw std::runtime_error("Vulkan not supported!\n");
+    }
+
+    //pass window hints
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
+    //create a window
+    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Test Window", nullptr, nullptr);
+    if (!window)
+    {
+        std::cerr << "GLFW window initalization failed!\n";
         glfwTerminate();
         return -1;
     }
-    std::cout << "GLFW window created!" << std::endl;
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    // GLAD initialization (loading openGL function pointers)
-    std::cout << "initializing GLAD..." << std::endl;
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    //set key callback function
+    glfwSetKeyCallback(window, GLFW_key_callback);
+
+    if (DEBUG)
     {
-        std::cout << "GLAD initialization failed!" << std::endl;
-        return -1;
+        std::cout << "glfw setup complete!\n";
     }
-    std::cout << "GLAD initialized" << std::endl;
 
-    glEnable(GL_DEPTH_TEST);
+    //INSTANCE SETUP//
 
-    shader l_program{LIGHT_VERTEX_SHADER_PATH, LIGHT_FRAGMENT_SHADER_PATH};
-
-    shader c_program{CUBE_VERTEX_SHADER_PATH, CUBE_FRAGMENT_SHADER_PATH};
-
-    std::vector<cube> cubes;
-
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f,  0.0f,  2.0f), glm::vec3(1.0f, 0.0f, 0.0f)});
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(-2.0f,  0.0f, -2.0f), glm::vec3(0.0f, 1.0f, 0.0f)});
-    cubes.push_back(cube{c_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3( 2.0f,  0.0f,  2.0f), glm::vec3(0.0f, 0.0f, 1.0f)});
-
-    shader fb_program{FB_VERTEX_SHADER_PATH, FB_FRAGMENT_SHADER_PATH};
-
-    float quad_vertices[] = 
+    if (DEBUG)
     {
-        // positions   // tex_coords
-        -1.0f,  1.0f,  0.0f, 1.0f,
-        -1.0f, -1.0f,  0.0f, 0.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
+        std::cout << "instance setup in progress...\n";
+    }
 
-        -1.0f,  1.0f,  0.0f, 1.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-         1.0f,  1.0f,  1.0f, 1.0f
+    //setup application info
+    vk::ApplicationInfo app_info
+    {
+        "hello triangle", // app name
+        VK_MAKE_VERSION(1, 0, 0), //application version
+        "no engine", //engine name
+        VK_MAKE_VERSION(1, 0, 0), //engine version
+        VK_API_VERSION_1_0 //API version
     };
 
-    unsigned int quadVAO, quadVBO;
+    //gather glfw extensions
+    uint32_t glfw_extension_count = 0;
+    const char **glfw_extensions;
+    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
-    glGenVertexArrays(1, &quadVAO);
-    glGenBuffers(1, &quadVBO);
+    std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 
-    glBindVertexArray(quadVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    //add extension for mac compatability
+    extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), &quad_vertices, GL_STATIC_DRAW);
+    //make sure extensions are supported by machine
+    check_extensions(extensions);
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+    //setup instance info
+    vk::InstanceCreateInfo create_info
+    {
+        vk::InstanceCreateFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR), //flags
+        &app_info, //application info
+        0, //layer count
+        nullptr, //layer names
+        static_cast<uint32_t>(extensions.size()), //extension size
+        extensions.data() //extension names
+    };
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+    //create the instance
+    VkInstance instance{vk::createInstance(create_info)};
 
-    fb_program.use();
-    fb_program.set_int("screen_texture", 0);
+    if (!instance)
+    {
+        throw std::runtime_error("failed to create instance!\n");
+    }
 
-    unsigned int FBO;
-    glGenFramebuffers(1, &FBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    if (DEBUG)
+    {
+        std::cout << "instance setup complete!\n";
+    }
 
-    unsigned int texture_colorbuffer;
-    glGenTextures(1, &texture_colorbuffer);
-    glBindTexture(GL_TEXTURE_2D, texture_colorbuffer);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, RENDER_WIDTH, RENDER_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_colorbuffer, 0);
+    //RUNTIME LOOP//
 
-    unsigned int RBO;
-    glGenRenderbuffers(1, &RBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, RENDER_WIDTH, RENDER_HEIGHT);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (DEBUG)
+    {
+        std::cout << "starting runtime loop...\n";
+    }
 
-    glm::vec3 view_pos{3.0f, 3.0f, 3.0f};
-
-    float angle{0.0f};
-
-    light a_light{l_program, RENDER_WIDTH, RENDER_HEIGHT, glm::vec3(0.0, 0.0f, 0.0f), glm::vec3(1.0f)};
-
-    // render loop
     while (!glfwWindowShouldClose(window))
     {
-        // process inputs
-        key_callback(window, view_pos, angle, a_light);
-
-        // clear screen
-        glViewport(0, 0, RENDER_WIDTH, RENDER_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-
-        glEnable(GL_DEPTH_TEST);
-
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // draw cube to framebuffer
-        for (cube a_cube : cubes)
-        {
-            a_cube.draw(a_light.get_color(), a_light.get_pos(), view_pos);
-        };
-
-        a_light.draw(view_pos);
-
-        glBindVertexArray(0);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBlitFramebuffer
-        (
-            0, 0, RENDER_WIDTH, RENDER_HEIGHT,
-            0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
-            GL_COLOR_BUFFER_BIT, GL_NEAREST
-        );
-
-        // swap buffers and poll events
-        glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // terminate GLFW
-    std::cout << "terminating GLFW..." << std::endl;
-    glfwTerminate();
-    std::cout << "GLFW terminated!" << std::endl;
-}
+    if (DEBUG)
+    {
+        std::cout << "runtime loop ended!\n";
+    }
 
+    //CLEANUP//
+
+    if (DEBUG)
+    {
+        std::cout << "cleanup in progress...\n";
+    }
+
+    //vulkan instance cleanup
+    vkDestroyInstance(instance, nullptr);
+
+    //glfw window and session clean up
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    if (DEBUG)
+    {
+        std::cout << "cleanup complete!\n";
+    }
+    
+    return 0;
+}

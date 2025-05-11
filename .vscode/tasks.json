@@ -10,17 +10,17 @@
                 "-Wall",
                 "-fsanitize=address",
                 "-I./include",
-                "-lglfw",
-                "-lassimp",
-                "-framework",
-                "OpenGL",
+                "-I$VULKAN_SDK/include",
+                "-L$VULKAN_SDK/lib",
                 "./src/main.cpp",
-                "./src/shader.cpp",
-                "./src/cube.cpp",
-                "./src/light.cpp",
-                "./lib/glad.c",
                 "-o",
-                "build/oxidizer"
+                "build/oxidizer",
+                "-lvulkan", 
+                "-lglfw",
+                "-framework",
+                "QuartzCore",
+                "-framework",
+                "Metal"
             ],
             "group": {
                 "kind": "build",
@@ -28,7 +28,7 @@
             },
             "problemMatcher": [
                 "$gcc"
-            ],
+            ]
         }
     ]
 }
