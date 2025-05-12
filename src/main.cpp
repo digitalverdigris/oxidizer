@@ -23,6 +23,16 @@ void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, in
     }
 }
 
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+    vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    vk::DebugUtilsMessageTypeFlagsEXT messageTypes,
+    const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
+    void *pUserData)
+{
+    std::cout << "validation layer: " << pCallbackData->pMessage << std::endl;
+    return VK_FALSE;
+}
+
 bool check_extensions(std::vector<const char *> &extensions)
 {
 
@@ -159,7 +169,7 @@ int main()
     //setup application info
     vk::ApplicationInfo app_info
     {
-        "hello triangle", // app name
+        "hello triangle", //app name
         VK_MAKE_VERSION(1, 0, 0), //application version
         "no engine", //engine name
         VK_MAKE_VERSION(1, 0, 0), //engine version
@@ -179,7 +189,7 @@ int main()
     //extension required for debugging
     if (DEBUG)
     {
-        extensions.push_back("VK_EXT_debug_utils");
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
     //make sure extensions are supported by machine
@@ -195,7 +205,7 @@ int main()
     check_layers(layers);
 
     //setup instance info
-    vk::InstanceCreateInfo create_info
+    vk::InstanceCreateInfo instance_create_info
     {
         vk::InstanceCreateFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR), //flags
         &app_info, //application info
@@ -206,7 +216,7 @@ int main()
     };
 
     //create the instance
-    VkInstance instance{vk::createInstance(create_info)};
+    vk::Instance instance{vk::createInstance(instance_create_info)};
 
     if (!instance)
     {
@@ -217,6 +227,18 @@ int main()
     {
         std::cout << "instance setup complete!\n";
     }
+
+    //setup debug callback
+    vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
+
+    vk::DebugUtilsMessengerCreateInfoEXT debug_create_info(
+        vk::DebugUtilsMessengerCreateFlagsEXT(),
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+        debug_callback,
+        nullptr);
+
+    vk::DebugUtilsMessengerEXT debug_messenger{instance.createDebugUtilsMessengerEXT(debug_create_info, nullptr, dldi)};
 
     //RUNTIME LOOP//
 
@@ -242,8 +264,10 @@ int main()
         std::cout << "cleanup in progress...\n";
     }
 
+    instance.destroyDebugUtilsMessengerEXT(debug_messenger, nullptr, dldi);
+
     //vulkan instance cleanup
-    vkDestroyInstance(instance, nullptr);
+    instance.destroy();
 
     //glfw window and session clean up
     glfwDestroyWindow(window);
