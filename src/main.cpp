@@ -72,13 +72,13 @@ bool check_layers(std::vector<const char *> &layers)
 
     if (DEBUG)
     {
-        std::cout << "supported extensions:\n";
+        std::cout << "supported layers:\n";
         for (vk::LayerProperties supported_layer : supported_layers)
         {
             std::cout << '\t' << supported_layer.layerName << '\n';
         }
 
-        std::cout << "requested extensions:\n";
+        std::cout << "requested layers:\n";
         for (const char *layer : layers)
         {
             std::cout << '\t' << layer << '\n';
@@ -95,12 +95,12 @@ bool check_layers(std::vector<const char *> &layers)
             if (strcmp(layer, supported_layer.layerName) == 0)
             {
                 found = true;
-                std::cout << "extension \"" << layer << "\" is supported!\n";
+                std::cout << "layer \"" << layer << "\" is supported!\n";
             }
         }
         if (!found)
         {
-            std::cout << "extension \"" << layer << "\" is not supported!\n";
+            std::cout << "layer \"" << layer << "\" is not supported!\n";
             return false;
         }
     }
@@ -113,10 +113,10 @@ int main()
 
     if (DEBUG)
     {
-        std::cout << "glfw setup in progress...\n";
+        std::cout << "GLFW setup in progress...\n";
     }
 
-    //initialize glfw
+    //initialize GLFW
     if (!glfwInit())
     {
         throw std::runtime_error("GLFW initalization failed!\n");
@@ -146,7 +146,7 @@ int main()
 
     if (DEBUG)
     {
-        std::cout << "glfw setup complete!\n";
+        std::cout << "GLFW setup complete!\n";
     }
 
     //INSTANCE SETUP//
@@ -176,16 +176,31 @@ int main()
     //add extension for mac compatability
     extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
+    //extension required for debugging
+    if (DEBUG)
+    {
+        extensions.push_back("VK_EXT_debug_utils");
+    }
+
     //make sure extensions are supported by machine
     check_extensions(extensions);
+
+    std::vector<const char *> layers;
+    if (DEBUG)
+    {
+        layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
+
+    // make sure layers are supported by machine
+    check_layers(layers);
 
     //setup instance info
     vk::InstanceCreateInfo create_info
     {
         vk::InstanceCreateFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR), //flags
         &app_info, //application info
-        0, //layer count
-        nullptr, //layer names
+        static_cast<uint32_t>(layers.size()), //layer count
+        layers.data(), //layer names
         static_cast<uint32_t>(extensions.size()), //extension size
         extensions.data() //extension names
     };
