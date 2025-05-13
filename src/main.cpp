@@ -15,6 +15,19 @@
 
 #define DEBUG true
 
+//HELPER STRUCTS//
+
+struct queue_family_indices 
+{
+	std::optional<uint32_t> graphics_family;
+	std::optional<uint32_t> present_family;
+
+	bool is_complete() 
+    {
+		return graphics_family.has_value() && present_family.has_value();
+	}
+};
+
 //CALLBACK FUNCTIONS//
 void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
@@ -78,6 +91,8 @@ GLFWwindow* setup_window()
     return window;
 }
 
+//EXTENSION SUPPORT VERIFICATION FUNCTION//
+
 bool check_extension_support(const std::vector<const char *> &extensions)
 {
 
@@ -119,6 +134,8 @@ bool check_extension_support(const std::vector<const char *> &extensions)
     }
     return true;
 }
+
+//LAYER SUPPORT VERIFICATION FUNCTION//
 
 bool check_layer_support(const std::vector<const char *> &layers)
 {
@@ -162,13 +179,15 @@ bool check_layer_support(const std::vector<const char *> &layers)
     return true;
 }
 
+//DEVICE HELPER FUNCTIONS//
+
 bool check_device_support(const vk::PhysicalDevice &device, const std::vector<const char *> &requested_extensions)
 {
     std::set<std::string> required_extensions(requested_extensions.begin(), requested_extensions.end());
 
     if (DEBUG)
     {
-        std::cout << "Device can support extensions:\n";
+        std::cout << "device can support extensions:\n";
     }
 
     for (vk::ExtensionProperties &extension : device.enumerateDeviceExtensionProperties())
@@ -185,7 +204,6 @@ bool check_device_support(const vk::PhysicalDevice &device, const std::vector<co
     return required_extensions.empty();
 }
 
-//DEVICE HELPER FUNCTIONS//
 
 bool check_device_suitability(const vk::PhysicalDevice &device)
 {
@@ -200,7 +218,7 @@ bool check_device_suitability(const vk::PhysicalDevice &device)
 
     if (DEBUG)
     {
-        std::cout << "we are requesting device extensions:\n";
+        std::cout << "requested device extensions:\n";
 
         for (const char *extension : requested_extensions)
         {
@@ -334,7 +352,12 @@ vk::Instance setup_instance()
 
 vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, const vk::detail::DispatchLoaderDynamic &dldi)
 {
-    // DEBUG SETUP//
+    // DEBUG MESSENGER SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "debug messenger setup in progress...\n";
+    }
 
     // setup debug callback
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info(
@@ -344,6 +367,7 @@ vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, c
         debug_callback,
         nullptr);
 
+    // initalize the messenger
     vk::DebugUtilsMessengerEXT debug_messenger{instance.createDebugUtilsMessengerEXT(debug_create_info, nullptr, dldi)};
 
     if (!debug_messenger)
@@ -351,6 +375,7 @@ vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, c
         throw std::runtime_error("failed to create debug messenger!\n");
     }
 
+    //send a test message
     if(DEBUG)
     {
         instance.submitDebugUtilsMessageEXT(
@@ -361,12 +386,24 @@ vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, c
             dldi);
     }
 
+    if (DEBUG)
+    {
+        std::cout << "debug messenger setup complete!\n";
+    }
+
     return debug_messenger;
 }
 
-vk::PhysicalDevice setup_device(const vk::Instance &instance)
+vk::PhysicalDevice setup_physical_device(const vk::Instance &instance)
 {
     // PHYSICAL DEVICE SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "physical device setup in progress...\n";
+    }
+
+    //initalize list of available devices
     std::vector<vk::PhysicalDevice> available_devices{instance.enumeratePhysicalDevices()};
 
     if (DEBUG)
@@ -374,6 +411,7 @@ vk::PhysicalDevice setup_device(const vk::Instance &instance)
         std::cout << "there are " << available_devices.size() << " physical devices available on this system\n";
     }
 
+    //check if we can use any of the available devices and return a suitable one
     for (vk::PhysicalDevice available_device : available_devices)
     {
         if (DEBUG)
@@ -382,11 +420,63 @@ vk::PhysicalDevice setup_device(const vk::Instance &instance)
         }
         if (check_device_suitability(available_device))
         {
+            if (DEBUG)
+            {
+                std::cout << "physical device setup complete!\n";
+            }
             return available_device;
         }
     }
     throw std::runtime_error("failed to find suitable device!\n");
     return nullptr;
+}
+
+queue_family_indices setup_queue_families(const vk::PhysicalDevice &device)
+{
+    //QUEUE FAMILY SETUP//
+    
+    if (DEBUG)
+    {
+        std::cout << "queue families setup in progress...\n";
+    }
+
+    //initalize the queue family struct
+    queue_family_indices indices;
+
+    std::vector<vk::QueueFamilyProperties> queue_families{device.getQueueFamilyProperties()};
+
+	if (DEBUG) 
+    {
+		std::cout << "there are " << queue_families.size() << " queue families available on the system.\n";
+	}
+
+    //find a queue family that can be used
+    int i{0};
+    for(vk::QueueFamilyProperties queue_family : queue_families)
+    {
+        if (queue_family.queueFlags & vk::QueueFlagBits::eGraphics)
+        {
+            indices.graphics_family = i;
+            indices.present_family = i;
+        }
+
+        if (DEBUG) 
+        {
+		    std::cout << "queue family " << i << " is suitable for graphics and presenting.\n";
+		}
+
+        if (indices.is_complete()) {
+			break;
+		}
+        i++;
+    }
+
+    if (DEBUG)
+    {
+        std::cout << "queue family setup complete!\n";
+    }
+
+    return indices;
 }
 
 int main()
@@ -403,7 +493,10 @@ int main()
     vk::DebugUtilsMessengerEXT debug_messenger{setup_debug_messenger(instance, dldi)};
 
     //setup device
-    vk::PhysicalDevice device{setup_device(instance)};
+    vk::PhysicalDevice device{setup_physical_device(instance)};
+
+    //setup queue_familes
+    queue_family_indices queue_family{setup_queue_families(device)};
 
     //RUNTIME LOOP//
 
@@ -412,10 +505,12 @@ int main()
         std::cout << "starting runtime loop...\n";
     }
 
+    /*
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
     }
+    */
 
     if (DEBUG)
     {
