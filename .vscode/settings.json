@@ -50,6 +50,14 @@
         "memory_resource": "cpp",
         "type_traits": "cpp",
         "utility": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "span": "cpp",
+        "unordered_map": "cpp",
+        "format": "cpp",
+        "text_encoding": "cpp"
     }
 }

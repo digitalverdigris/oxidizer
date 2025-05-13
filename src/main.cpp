@@ -4,6 +4,8 @@
 #include <vulkan/vulkan.hpp>
 #include <iostream>
 #include <vector>
+#include <string>
+#include <set>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -13,8 +15,7 @@
 
 #define DEBUG true
 
-GLFWwindow *window = nullptr;
-
+//CALLBACK FUNCTIONS//
 void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     if ((key == GLFW_KEY_ESCAPE) && (action == GLFW_PRESS))
@@ -33,7 +34,51 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     return VK_FALSE;
 }
 
-bool check_extensions(std::vector<const char *> &extensions)
+GLFWwindow* setup_window()
+{
+    //GLFW SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "GLFW setup in progress...\n";
+    }
+
+    // initialize GLFW
+    if (!glfwInit())
+    {
+        throw std::runtime_error("GLFW initalization failed!\n");
+    }
+
+    // check if Vulkan is supported
+    if (!glfwVulkanSupported())
+    {
+        throw std::runtime_error("Vulkan not supported!\n");
+    }
+
+    // pass window hints
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
+    // create a window
+    GLFWwindow *window{glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "test window", nullptr, nullptr)};
+    if (!window)
+    {
+        std::cerr << "GLFW window initalization failed!\n";
+        glfwTerminate();
+    }
+
+    // set key callback function
+    glfwSetKeyCallback(window, GLFW_key_callback);
+
+    if (DEBUG)
+    {
+        std::cout << "GLFW setup complete!\n";
+    }
+
+    return window;
+}
+
+bool check_extension_support(const std::vector<const char *> &extensions)
 {
 
     std::vector<vk::ExtensionProperties> supported_extensions = vk::enumerateInstanceExtensionProperties();
@@ -75,7 +120,7 @@ bool check_extensions(std::vector<const char *> &extensions)
     return true;
 }
 
-bool check_layers(std::vector<const char *> &layers)
+bool check_layer_support(const std::vector<const char *> &layers)
 {
 
     std::vector<vk::LayerProperties> supported_layers = vk::enumerateInstanceLayerProperties();
@@ -117,48 +162,106 @@ bool check_layers(std::vector<const char *> &layers)
     return true;
 }
 
-int main()
+bool check_device_support(const vk::PhysicalDevice &device, const std::vector<const char *> &requested_extensions)
 {
-    //GLFW SETUP//
+    std::set<std::string> required_extensions(requested_extensions.begin(), requested_extensions.end());
 
     if (DEBUG)
     {
-        std::cout << "GLFW setup in progress...\n";
+        std::cout << "Device can support extensions:\n";
     }
 
-    //initialize GLFW
-    if (!glfwInit())
+    for (vk::ExtensionProperties &extension : device.enumerateDeviceExtensionProperties())
     {
-        throw std::runtime_error("GLFW initalization failed!\n");
+
+        if (DEBUG)
+        {
+            std::cout << "\t\"" << extension.extensionName << "\"\n";
+        }
+
+        required_extensions.erase(extension.extensionName);
     }
 
-    //check if Vulkan is supported
-    if (!glfwVulkanSupported())
+    return required_extensions.empty();
+}
+
+//DEVICE HELPER FUNCTIONS//
+
+bool check_device_suitability(const vk::PhysicalDevice &device)
+{
+    if (DEBUG)
     {
-        throw std::runtime_error("Vulkan not supported!\n");
+        std::cout << "checking if device is suitable\n";
     }
 
-    //pass window hints
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
-
-    //create a window
-    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Test Window", nullptr, nullptr);
-    if (!window)
-    {
-        std::cerr << "GLFW window initalization failed!\n";
-        glfwTerminate();
-        return -1;
-    }
-
-    //set key callback function
-    glfwSetKeyCallback(window, GLFW_key_callback);
+    const std::vector<const char *> requested_extensions =
+        {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     if (DEBUG)
     {
-        std::cout << "GLFW setup complete!\n";
+        std::cout << "we are requesting device extensions:\n";
+
+        for (const char *extension : requested_extensions)
+        {
+            std::cout << "\t\"" << extension << "\"\n";
+        }
     }
 
+    if (bool extensions_supported{check_device_support(device, requested_extensions)})
+    {
+
+        if (DEBUG)
+        {
+            std::cout << "device can support the requested extensions!\n";
+        }
+    }
+    else
+    {
+
+        if (DEBUG)
+        {
+            std::cout << "device can't support the requested extensions!\n";
+        }
+
+        return false;
+    }
+    return true;
+}
+
+void log_device_properties(const vk::PhysicalDevice &device)
+{
+    vk::PhysicalDeviceProperties device_properties{device.getProperties()};
+
+    std::cout << "device name: " << device_properties.deviceName << '\n';
+
+    std::cout << "device type: ";
+    switch (device_properties.deviceType)
+    {
+
+    case (vk::PhysicalDeviceType::eCpu):
+        std::cout << "CPU\n";
+        break;
+
+    case (vk::PhysicalDeviceType::eDiscreteGpu):
+        std::cout << "discrete GPU\n";
+        break;
+
+    case (vk::PhysicalDeviceType::eIntegratedGpu):
+        std::cout << "integrated GPU\n";
+        break;
+
+    case (vk::PhysicalDeviceType::eVirtualGpu):
+        std::cout << "virtual GPU\n";
+        break;
+
+    default:
+        std::cout << "other\n";
+    }
+}
+
+vk::Instance setup_instance()
+{
     //INSTANCE SETUP//
 
     if (DEBUG)
@@ -166,34 +269,33 @@ int main()
         std::cout << "instance setup in progress...\n";
     }
 
-    //setup application info
-    vk::ApplicationInfo app_info
-    {
-        "hello triangle", //app name
-        VK_MAKE_VERSION(1, 0, 0), //application version
-        "no engine", //engine name
-        VK_MAKE_VERSION(1, 0, 0), //engine version
-        VK_API_VERSION_1_0 //API version
+    // setup application info
+    vk::ApplicationInfo app_info{
+        "hello triangle",         // app name
+        VK_MAKE_VERSION(1, 0, 0), // application version
+        "no engine",              // engine name
+        VK_MAKE_VERSION(1, 0, 0), // engine version
+        VK_API_VERSION_1_0        // API version
     };
 
-    //gather glfw extensions
+    // gather glfw extensions
     uint32_t glfw_extension_count = 0;
     const char **glfw_extensions;
     glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
     std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 
-    //add extension for mac compatability
-    extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    // add extension for mac compatability
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
-    //extension required for debugging
+    // extension required for debugging
     if (DEBUG)
     {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
-    //make sure extensions are supported by machine
-    check_extensions(extensions);
+    // make sure extensions are supported by machine
+    check_extension_support(extensions);
 
     std::vector<const char *> layers;
     if (DEBUG)
@@ -202,20 +304,19 @@ int main()
     }
 
     // make sure layers are supported by machine
-    check_layers(layers);
+    check_layer_support(layers);
 
-    //setup instance info
-    vk::InstanceCreateInfo instance_create_info
-    {
-        vk::InstanceCreateFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR), //flags
-        &app_info, //application info
-        static_cast<uint32_t>(layers.size()), //layer count
-        layers.data(), //layer names
-        static_cast<uint32_t>(extensions.size()), //extension size
-        extensions.data() //extension names
+    // setup instance info
+    vk::InstanceCreateInfo instance_create_info{
+        vk::InstanceCreateFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR), // flags
+        &app_info,                                                                     // application info
+        static_cast<uint32_t>(layers.size()),                                          // layer count
+        layers.data(),                                                                 // layer names
+        static_cast<uint32_t>(extensions.size()),                                      // extension size
+        extensions.data()                                                              // extension names
     };
 
-    //create the instance
+    // create the instance
     vk::Instance instance{vk::createInstance(instance_create_info)};
 
     if (!instance)
@@ -228,9 +329,14 @@ int main()
         std::cout << "instance setup complete!\n";
     }
 
-    //setup debug callback
-    vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
+    return instance;
+}
 
+vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, const vk::detail::DispatchLoaderDynamic &dldi)
+{
+    // DEBUG SETUP//
+
+    // setup debug callback
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info(
         vk::DebugUtilsMessengerCreateFlagsEXT(),
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
@@ -239,6 +345,65 @@ int main()
         nullptr);
 
     vk::DebugUtilsMessengerEXT debug_messenger{instance.createDebugUtilsMessengerEXT(debug_create_info, nullptr, dldi)};
+
+    if (!debug_messenger)
+    {
+        throw std::runtime_error("failed to create debug messenger!\n");
+    }
+
+    if(DEBUG)
+    {
+        instance.submitDebugUtilsMessageEXT(
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning,
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
+            vk::DebugUtilsMessengerCallbackDataEXT()
+                .setPMessage("this is a test debug message from inside the app!"),
+            dldi);
+    }
+
+    return debug_messenger;
+}
+
+vk::PhysicalDevice setup_device(const vk::Instance &instance)
+{
+    // PHYSICAL DEVICE SETUP//
+    std::vector<vk::PhysicalDevice> available_devices{instance.enumeratePhysicalDevices()};
+
+    if (DEBUG)
+    {
+        std::cout << "there are " << available_devices.size() << " physical devices available on this system\n";
+    }
+
+    for (vk::PhysicalDevice available_device : available_devices)
+    {
+        if (DEBUG)
+        {
+            log_device_properties(available_device);
+        }
+        if (check_device_suitability(available_device))
+        {
+            return available_device;
+        }
+    }
+    throw std::runtime_error("failed to find suitable device!\n");
+    return nullptr;
+}
+
+int main()
+{
+    //setup GLFW window
+    GLFWwindow *window{setup_window()};
+
+    //setup Vulkan instance
+    vk::Instance instance{setup_instance()};
+
+    //setup debug messanger
+    
+    vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
+    vk::DebugUtilsMessengerEXT debug_messenger{setup_debug_messenger(instance, dldi)};
+
+    //setup device
+    vk::PhysicalDevice device{setup_device(instance)};
 
     //RUNTIME LOOP//
 
