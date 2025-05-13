@@ -214,7 +214,8 @@ bool check_device_suitability(const vk::PhysicalDevice &device)
 
     const std::vector<const char *> requested_extensions =
         {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
 
     if (DEBUG)
     {
@@ -303,8 +304,9 @@ vk::Instance setup_instance()
 
     std::vector<const char *> extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 
-    // add extension for mac compatability
+    // add extensions for mac compatability
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     // extension required for debugging
     if (DEBUG)
@@ -479,6 +481,71 @@ queue_family_indices setup_queue_families(const vk::PhysicalDevice &device)
     return indices;
 }
 
+vk::Device setup_logical_device(const vk::PhysicalDevice &physical_device, const queue_family_indices &indices)
+{
+    //LOGICAL DEVICE SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "logical device setup in progress...\n";
+    }
+
+    float queue_priority{1.0f};
+    
+    //create device queue info
+    vk::DeviceQueueCreateInfo queue_create_info
+    {   
+        vk::DeviceQueueCreateFlags(), 
+        indices.graphics_family.value(), 
+        1, 
+        &queue_priority
+    };
+
+    vk::PhysicalDeviceFeatures device_features{};
+
+    //set enabled layers
+    std::vector<const char *> enabled_layers;
+    if (DEBUG)
+    {
+        enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
+    }
+
+    //set enabled extensions
+    std::vector<const char *> enabled_extensions;
+    enabled_extensions.push_back("VK_KHR_portability_subset");
+
+    //create the device
+    vk::DeviceCreateInfo device_info
+    {
+        vk::DeviceCreateFlags(),
+        1,
+        &queue_create_info,
+        static_cast<uint32_t>(enabled_layers.size()),
+        enabled_layers.data(),
+        static_cast<uint32_t>(enabled_extensions.size()),
+        enabled_extensions.data(),
+        &device_features
+    };
+
+    vk::Device device{physical_device.createDevice(device_info)};
+
+    if (!device)
+    {
+        throw std::runtime_error("failed to create logical device!\n");
+    }
+
+    if (DEBUG)
+    {
+        std::cout << "logical device setup complete!\n";
+    }
+    return device;
+}
+
+vk::Queue setup_queue(const vk::PhysicalDevice &physical_device, const vk::Device &logical_device, const queue_family_indices &indices)
+{
+    return logical_device.getQueue(indices.graphics_family.value(),0);
+}
+
 int main()
 {
     //setup GLFW window
@@ -488,15 +555,14 @@ int main()
     vk::Instance instance{setup_instance()};
 
     //setup debug messanger
-    
     vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
     vk::DebugUtilsMessengerEXT debug_messenger{setup_debug_messenger(instance, dldi)};
 
     //setup device
-    vk::PhysicalDevice device{setup_physical_device(instance)};
-
-    //setup queue_familes
-    queue_family_indices queue_family{setup_queue_families(device)};
+    vk::PhysicalDevice physical_device{setup_physical_device(instance)};
+    queue_family_indices q_f_indices{setup_queue_families(physical_device)};
+    vk::Device logical_device{setup_logical_device(physical_device, q_f_indices)};
+    vk::Queue queue{setup_queue(physical_device, logical_device, q_f_indices)};
 
     //RUNTIME LOOP//
 
@@ -526,10 +592,11 @@ int main()
 
     instance.destroyDebugUtilsMessengerEXT(debug_messenger, nullptr, dldi);
 
-    //vulkan instance cleanup
+    //vulkan cleanup
+    logical_device.destroy();
     instance.destroy();
 
-    //glfw window and session clean up
+    //glfw clean up
     glfwDestroyWindow(window);
     glfwTerminate();
 
