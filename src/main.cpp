@@ -433,7 +433,7 @@ vk::PhysicalDevice setup_physical_device(const vk::Instance &instance)
     return nullptr;
 }
 
-queue_family_indices setup_queue_families(const vk::PhysicalDevice &device)
+queue_family_indices setup_queue_families(const vk::PhysicalDevice &device, const vk::SurfaceKHR &surface)
 {
     //QUEUE FAMILY SETUP//
     
@@ -459,13 +459,20 @@ queue_family_indices setup_queue_families(const vk::PhysicalDevice &device)
         if (queue_family.queueFlags & vk::QueueFlagBits::eGraphics)
         {
             indices.graphics_family = i;
-            indices.present_family = i;
+            if (DEBUG)
+            {
+                std::cout << "queue family " << i << " is suitable for graphics\n";
+            }
         }
 
-        if (DEBUG) 
+        if (device.getSurfaceSupportKHR(i, surface))
         {
-		    std::cout << "queue family " << i << " is suitable for graphics and presenting.\n";
-		}
+            indices.present_family = i;
+            if (DEBUG)
+            {
+                std::cout << "queue family " << i << " is suitable for presenting\n";
+            }
+        }
 
         if (indices.is_complete()) {
 			break;
@@ -490,16 +497,29 @@ vk::Device setup_logical_device(const vk::PhysicalDevice &physical_device, const
         std::cout << "logical device setup in progress...\n";
     }
 
+    std::vector<uint32_t> unique_indices;
+    unique_indices.push_back(indices.graphics_family.value());
+    if (indices.graphics_family.value() != indices.present_family.value())
+    {
+        unique_indices.push_back(indices.present_family.value());
+    }
+
+    std::vector<vk::DeviceQueueCreateInfo> queue_create_info;
     float queue_priority{1.0f};
-    
-    //create device queue info
-    vk::DeviceQueueCreateInfo queue_create_info
-    {   
-        vk::DeviceQueueCreateFlags(), 
-        indices.graphics_family.value(), 
-        1, 
-        &queue_priority
-    };
+
+    for (uint32_t queue_family_index : unique_indices)
+    {
+        queue_create_info.push_back
+        (
+            vk::DeviceQueueCreateInfo
+            {
+                vk::DeviceQueueCreateFlags(),
+                queue_family_index,
+                1,
+                &queue_priority
+            }
+        );
+    }
 
     vk::PhysicalDeviceFeatures device_features{};
 
@@ -515,17 +535,15 @@ vk::Device setup_logical_device(const vk::PhysicalDevice &physical_device, const
     enabled_extensions.push_back("VK_KHR_portability_subset");
 
     //create the device
-    vk::DeviceCreateInfo device_info
-    {
+    vk::DeviceCreateInfo device_info{
         vk::DeviceCreateFlags(),
-        1,
-        &queue_create_info,
+        static_cast<uint32_t>(queue_create_info.size()),
+        queue_create_info.data(),
         static_cast<uint32_t>(enabled_layers.size()),
         enabled_layers.data(),
         static_cast<uint32_t>(enabled_extensions.size()),
         enabled_extensions.data(),
-        &device_features
-    };
+        &device_features};
 
     vk::Device device{physical_device.createDevice(device_info)};
 
@@ -541,9 +559,15 @@ vk::Device setup_logical_device(const vk::PhysicalDevice &physical_device, const
     return device;
 }
 
-vk::Queue setup_queue(const vk::PhysicalDevice &physical_device, const vk::Device &logical_device, const queue_family_indices &indices)
+std::array<vk::Queue,2> setup_queues(const vk::Device &logical_device, const queue_family_indices &indices)
 {
-    return logical_device.getQueue(indices.graphics_family.value(),0);
+    return 
+    {
+        {
+        logical_device.getQueue(indices.graphics_family.value(), 0),
+        logical_device.getQueue(indices.graphics_family.value(), 0),
+        }
+    };
 }
 
 int main()
@@ -558,11 +582,22 @@ int main()
     vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
     vk::DebugUtilsMessengerEXT debug_messenger{setup_debug_messenger(instance, dldi)};
 
+    // setup surface
+    VkSurfaceKHR c_style_surface;
+    if (glfwCreateWindowSurface(instance, window, nullptr, &c_style_surface) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create surface!\n");
+    }
+
+    vk::SurfaceKHR surface{c_style_surface};
+
     //setup device
     vk::PhysicalDevice physical_device{setup_physical_device(instance)};
-    queue_family_indices q_f_indices{setup_queue_families(physical_device)};
+    queue_family_indices q_f_indices{setup_queue_families(physical_device, surface)};
     vk::Device logical_device{setup_logical_device(physical_device, q_f_indices)};
-    vk::Queue queue{setup_queue(physical_device, logical_device, q_f_indices)};
+    std::array<vk::Queue,2> queues{setup_queues(logical_device, q_f_indices)};
+    vk::Queue graphics_queue = queues[0];
+    vk::Queue present_queue = queues[1];
 
     //RUNTIME LOOP//
 
@@ -594,6 +629,7 @@ int main()
 
     //vulkan cleanup
     logical_device.destroy();
+    instance.destroySurfaceKHR(surface);
     instance.destroy();
 
     //glfw clean up
