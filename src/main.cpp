@@ -28,6 +28,21 @@ struct queue_family_indices
 	}
 };
 
+struct swapchain_support_details
+{
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> present_modes;
+};
+
+struct swapchain_bundle
+{
+    vk::SwapchainKHR swapchain;
+    std::vector<vk::Image> images;
+    vk::Format format;
+    vk::Extent2D extent;
+};
+
 //CALLBACK FUNCTIONS//
 void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
@@ -45,50 +60,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 {
     std::cout << "validation layer: " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
-}
-
-GLFWwindow* setup_window()
-{
-    //GLFW SETUP//
-
-    if (DEBUG)
-    {
-        std::cout << "GLFW setup in progress...\n";
-    }
-
-    // initialize GLFW
-    if (!glfwInit())
-    {
-        throw std::runtime_error("GLFW initalization failed!\n");
-    }
-
-    // check if Vulkan is supported
-    if (!glfwVulkanSupported())
-    {
-        throw std::runtime_error("Vulkan not supported!\n");
-    }
-
-    // pass window hints
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
-
-    // create a window
-    GLFWwindow *window{glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "test window", nullptr, nullptr)};
-    if (!window)
-    {
-        std::cerr << "GLFW window initalization failed!\n";
-        glfwTerminate();
-    }
-
-    // set key callback function
-    glfwSetKeyCallback(window, GLFW_key_callback);
-
-    if (DEBUG)
-    {
-        std::cout << "GLFW setup complete!\n";
-    }
-
-    return window;
 }
 
 //EXTENSION SUPPORT VERIFICATION FUNCTION//
@@ -123,12 +94,18 @@ bool check_extension_support(const std::vector<const char *> &extensions)
             if (strcmp(extension, supported_extension.extensionName) == 0)
             {
                 found = true;
-                std::cout << "extension \"" << extension << "\" is supported!\n";
+                if (DEBUG)
+                {
+                    std::cout << "extension \"" << extension << "\" is supported!\n";
+                }
             }
         }
         if (!found)
         {
-            std::cout << "extension \"" << extension << "\" is not supported!\n";
+            if (DEBUG)
+            {
+                std::cout << "extension \"" << extension << "\" is not supported!\n";
+            }
             return false;
         }
     }
@@ -204,7 +181,6 @@ bool check_device_support(const vk::PhysicalDevice &device, const std::vector<co
     return required_extensions.empty();
 }
 
-
 bool check_device_suitability(const vk::PhysicalDevice &device)
 {
     if (DEBUG)
@@ -248,6 +224,9 @@ bool check_device_suitability(const vk::PhysicalDevice &device)
     return true;
 }
 
+
+//LOGGING FUNCTIONS//
+
 void log_device_properties(const vk::PhysicalDevice &device)
 {
     vk::PhysicalDeviceProperties device_properties{device.getProperties()};
@@ -277,6 +256,214 @@ void log_device_properties(const vk::PhysicalDevice &device)
     default:
         std::cout << "other\n";
     }
+}
+
+std::vector<std::string> log_transform_bits(vk::SurfaceTransformFlagsKHR bits)
+{
+    std::vector<std::string> result;
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eIdentity)
+    {
+        result.push_back("identity");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eRotate90)
+    {
+        result.push_back("90 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eRotate180)
+    {
+        result.push_back("180 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eRotate270)
+    {
+        result.push_back("270 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eHorizontalMirror)
+    {
+        result.push_back("horizontal mirror");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate90)
+    {
+        result.push_back("horizontal mirror, then 90 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate180)
+    {
+        result.push_back("horizontal mirror, then 180 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate270)
+    {
+        result.push_back("horizontal mirror, then 270 degree rotation");
+    }
+
+    if (bits & vk::SurfaceTransformFlagBitsKHR::eInherit)
+    {
+        result.push_back("inherited");
+    }
+
+    return result;
+}
+
+std::vector<std::string> log_alpha_composite_bits(vk::CompositeAlphaFlagsKHR bits)
+{
+    std::vector<std::string> result;
+
+    if (bits & vk::CompositeAlphaFlagBitsKHR::eOpaque)
+    {
+        result.push_back("opaque");
+    }
+
+    if (bits & vk::CompositeAlphaFlagBitsKHR::ePreMultiplied)
+    {
+        result.push_back("pre multiplied");
+    }
+
+    if (bits & vk::CompositeAlphaFlagBitsKHR::ePostMultiplied)
+    {
+        result.push_back("post multiplied");
+    }
+
+    if (bits & vk::CompositeAlphaFlagBitsKHR::eInherit)
+    {
+        result.push_back("inherit");
+    }
+
+    return result;
+}
+
+std::vector<std::string> log_image_usage_bits(vk::ImageUsageFlags bits)
+{
+    std::vector<std::string> result;
+
+    if (bits & vk::ImageUsageFlagBits::eTransferSrc)
+    {
+        result.push_back("transfer src");
+    }
+    if (bits & vk::ImageUsageFlagBits::eTransferDst)
+    {
+        result.push_back("transfer dst");
+    }
+    if (bits & vk::ImageUsageFlagBits::eSampled)
+    {
+        result.push_back("sampled");
+    }
+    if (bits & vk::ImageUsageFlagBits::eStorage)
+    {
+        result.push_back("storage");
+    }
+    if (bits & vk::ImageUsageFlagBits::eColorAttachment)
+    {
+        result.push_back("color attachment");
+    }
+    if (bits & vk::ImageUsageFlagBits::eDepthStencilAttachment)
+    {
+        result.push_back("depth/stencil attachment");
+    }
+    if (bits & vk::ImageUsageFlagBits::eTransientAttachment)
+    {
+        result.push_back("transient attachment");
+    }
+    if (bits & vk::ImageUsageFlagBits::eInputAttachment)
+    {
+        result.push_back("input attachment");
+    }
+    if (bits & vk::ImageUsageFlagBits::eFragmentDensityMapEXT)
+    {
+        result.push_back("fragment density map");
+    }
+    if (bits & vk::ImageUsageFlagBits::eFragmentShadingRateAttachmentKHR)
+    {
+        result.push_back("fragment shading rate attachment");
+    }
+    return result;
+}
+
+std::string log_present_mode(vk::PresentModeKHR present_mode)
+{
+    if (present_mode == vk::PresentModeKHR::eImmediate)
+    {
+        return "immediate";
+    }
+    if (present_mode == vk::PresentModeKHR::eMailbox)
+    {
+        return "mailbox";
+    }
+    if (present_mode == vk::PresentModeKHR::eFifo)
+    {
+        return "fifo";
+    }
+    if (present_mode == vk::PresentModeKHR::eFifoRelaxed)
+    {
+        return "relaxed fifo";
+    }
+    if (present_mode == vk::PresentModeKHR::eSharedDemandRefresh)
+    {
+        return "shared demand refresh";
+    }
+    if (present_mode == vk::PresentModeKHR::eSharedContinuousRefresh)
+    {
+        return "shared continuous refresh: the presentation engine and application have \
+concurrent access to a single image, which is referred to as a shared presentable image. The \
+presentation engine periodically updates the current image on its regular refresh cycle. The \
+application is only required to make one initial presentation request, after which the \
+presentation engine must update the current image without any need for further presentation \
+requests. The application can indicate the image contents have been updated by making a \
+presentation request, but this does not guarantee the timing of when it will be updated. \
+This mode may result in visible tearing if rendering to the image is not timed correctly.";
+    }
+    return "none/undefined";
+}
+
+//SETUP FUNCTIONS//
+
+GLFWwindow *setup_window()
+{
+    // GLFW SETUP//
+
+    if (DEBUG)
+    {
+        std::cout << "GLFW setup in progress...\n";
+    }
+
+    // initialize GLFW
+    if (!glfwInit())
+    {
+        throw std::runtime_error("GLFW initalization failed!\n");
+    }
+
+    // check if Vulkan is supported
+    if (!glfwVulkanSupported())
+    {
+        throw std::runtime_error("Vulkan not supported!\n");
+    }
+
+    // pass window hints
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
+    // create a window
+    GLFWwindow *window{glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "test window", nullptr, nullptr)};
+    if (!window)
+    {
+        std::cerr << "GLFW window initalization failed!\n";
+        glfwTerminate();
+    }
+
+    // set key callback function
+    glfwSetKeyCallback(window, GLFW_key_callback);
+
+    if (DEBUG)
+    {
+        std::cout << "GLFW setup complete!\n";
+    }
+
+    return window;
 }
 
 vk::Instance setup_instance()
@@ -356,10 +543,7 @@ vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, c
 {
     // DEBUG MESSENGER SETUP//
 
-    if (DEBUG)
-    {
-        std::cout << "debug messenger setup in progress...\n";
-    }
+    std::cout << "debug messenger setup in progress...\n";
 
     // setup debug callback
     vk::DebugUtilsMessengerCreateInfoEXT debug_create_info(
@@ -378,20 +562,14 @@ vk::DebugUtilsMessengerEXT setup_debug_messenger(const vk::Instance &instance, c
     }
 
     //send a test message
-    if(DEBUG)
-    {
-        instance.submitDebugUtilsMessageEXT(
-            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning,
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
-            vk::DebugUtilsMessengerCallbackDataEXT()
-                .setPMessage("this is a test debug message from inside the app!"),
-            dldi);
-    }
+    instance.submitDebugUtilsMessageEXT(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning,
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral,
+        vk::DebugUtilsMessengerCallbackDataEXT()
+        .setPMessage("this is a test debug message from inside the app!"),
+        dldi);
 
-    if (DEBUG)
-    {
-        std::cout << "debug messenger setup complete!\n";
-    }
+    std::cout << "debug messenger setup complete!\n";
 
     return debug_messenger;
 }
@@ -533,6 +711,7 @@ vk::Device setup_logical_device(const vk::PhysicalDevice &physical_device, const
     //set enabled extensions
     std::vector<const char *> enabled_extensions;
     enabled_extensions.push_back("VK_KHR_portability_subset");
+    enabled_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
     //create the device
     vk::DeviceCreateInfo device_info{
@@ -570,6 +749,214 @@ std::array<vk::Queue,2> setup_queues(const vk::Device &logical_device, const que
     };
 }
 
+swapchain_support_details setup_swapchain_support(vk::PhysicalDevice physical_device, vk::SurfaceKHR surface)
+{
+    if (DEBUG)
+    {
+        std::cout << "swapchain support setup in progress...\n";
+    }
+
+    swapchain_support_details support;
+    support.capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+
+    if (DEBUG)
+    {
+        std::cout << "swapchain can support the following surface capabilities:\n";
+
+        std::cout << "\tminimum image count: " << support.capabilities.minImageCount << '\n';
+        std::cout << "\tmaximum image count: " << support.capabilities.maxImageCount << '\n';    
+
+        std::cout << "\tcurrent extent:\n";
+        std::cout << "\t\twidth: " << support.capabilities.currentExtent.width << '\n';
+        std::cout << "\t\theight: " << support.capabilities.currentExtent.height << '\n';
+
+        std::cout << "\tminimum extent supported:\n";
+        std::cout << "\t\twidth: " << support.capabilities.minImageExtent.width << '\n';
+        std::cout << "\t\theight: " << support.capabilities.minImageExtent.height << '\n';
+
+        std::cout << "\tmaximum extent supported:\n";
+        std::cout << "\t\twidth: " << support.capabilities.maxImageExtent.width << '\n';
+        std::cout << "\t\theight: " << support.capabilities.maxImageExtent.height << '\n';   
+        
+        std::cout << "\tmaximum image array layers: " << support.capabilities.maxImageArrayLayers << '\n';
+
+        std::vector<std::string> string_list;
+        
+        std::cout << "\tsupported transfroms:\n";
+        string_list = log_transform_bits(support.capabilities.supportedTransforms);
+
+        for (std::string line : string_list)
+        {
+            std::cout << "\t\t" << line << '\n';
+        }
+
+        std::cout << "\tcurrent transform:\n";
+        string_list = log_transform_bits(support.capabilities.currentTransform);
+
+        for (std::string line : string_list)
+        {
+            std::cout << "\t\t" << line << '\n';
+        }
+
+        std::cout << "\tsupported alpha operations:\n";
+        string_list = log_alpha_composite_bits(support.capabilities.supportedCompositeAlpha);
+
+        for (std::string line : string_list)
+        {
+            std::cout << "\t\t" << line << '\n';
+        }
+
+        std::cout << "\tsupported image usage:\n";
+        string_list = log_image_usage_bits(support.capabilities.supportedUsageFlags);
+        for (std::string line : string_list)
+        {
+            std::cout << "\t\t" << line << '\n';
+        }
+
+        support.formats = physical_device.getSurfaceFormatsKHR(surface);
+        std::cout << "\tsupported formats:\n";
+        if (DEBUG)
+        {
+            for (vk::SurfaceFormatKHR supported_format : support.formats)
+            {
+                std::cout << "\t\tsupported pixel format: " << vk::to_string(supported_format.format) << '\n';
+                std::cout << "\t\tsupported color space: " << vk::to_string(supported_format.colorSpace) << '\n';
+            }
+        }
+
+        std::cout << "\tsupported present modes:\n";
+        support.present_modes = physical_device.getSurfacePresentModesKHR(surface);
+        if (DEBUG)
+        {
+            for (vk::PresentModeKHR presentMode : support.present_modes)
+            {
+                std::cout << "\t\t" << log_present_mode(presentMode) << '\n';
+            }
+        }
+    }
+
+    if (DEBUG)
+    {
+        std::cout << "swapchain support setup complete!\n";
+    }
+
+    return support;
+}
+
+vk::SurfaceFormatKHR choose_swapchain_surface_format(std::vector<vk::SurfaceFormatKHR> formats)
+{
+    for (vk::SurfaceFormatKHR format : formats)
+    {
+        if (format.format == vk::Format::eB8G8R8A8Unorm
+            && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            {
+                return format;
+            }
+    }
+    return formats[0];
+}
+
+vk::PresentModeKHR choose_swapchain_surface_present_mode(std::vector<vk::PresentModeKHR> present_modes)
+{
+    for (vk::PresentModeKHR present_mode : present_modes)
+    {
+        if (present_mode == vk::PresentModeKHR::eFifo)
+        {
+            return present_mode;
+        }
+    }
+    return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D choose_swapchain_extent(uint32_t width, uint32_t height, vk::SurfaceCapabilitiesKHR capabilities)
+{
+    if (capabilities.currentExtent.width != UINT32_MAX)
+    {
+        return capabilities.currentExtent;
+    }
+    else
+    {
+        vk::Extent2D extent{width, height};
+
+        extent.width = std::min(capabilities.maxImageExtent.width, std::max(capabilities.minImageExtent.width, width));
+        extent.height = std::min(capabilities.maxImageExtent.height, std::max(capabilities.minImageExtent.width, height));
+
+        return extent;
+    }
+}
+
+swapchain_bundle setup_swapchain(vk::Device logical_device, vk::PhysicalDevice physical_device, vk::SurfaceKHR surface, queue_family_indices indices, int width, int height)
+{
+    if (DEBUG)
+    {
+        std::cout << "swapchain setup in progress...\n";
+    }
+
+    swapchain_support_details support{setup_swapchain_support(physical_device, surface)};
+   
+    vk::SurfaceFormatKHR format{choose_swapchain_surface_format(support.formats)};
+    
+    vk::PresentModeKHR present_mode{choose_swapchain_surface_present_mode(support.present_modes)};
+    
+    vk::Extent2D extent{choose_swapchain_extent(width, height, support.capabilities)};
+
+    uint32_t image_count = std::min(support.capabilities.maxImageCount, support.capabilities.minImageCount);
+
+    vk::SwapchainCreateInfoKHR create_info
+    {
+        vk::SwapchainCreateFlagsKHR(), 
+        surface, 
+        image_count, 
+        format.format, 
+        format.colorSpace, 
+        extent, 
+        1, 
+        vk::ImageUsageFlagBits::eColorAttachment
+    };
+
+    uint32_t q_f_indices[2]{indices.graphics_family.value(), indices.present_family.value()};
+
+    if (indices.graphics_family.value() != indices.present_family.value())
+    {
+        create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+        create_info.queueFamilyIndexCount = 2;
+        create_info.pQueueFamilyIndices = q_f_indices;
+    }
+    else
+    {
+        create_info.imageSharingMode = vk::SharingMode::eExclusive;
+    }
+    create_info.preTransform = support.capabilities.currentTransform;
+    create_info.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    create_info.presentMode = present_mode;
+    create_info.clipped = VK_TRUE;
+
+    create_info.oldSwapchain = vk::SwapchainKHR(nullptr);
+
+    swapchain_bundle bundle{};
+    try
+    {
+        bundle.swapchain = logical_device.createSwapchainKHR(create_info);
+    }
+    catch(vk::SystemError err)
+    {
+        throw std::runtime_error("failed to create swapchain!");
+    }
+    
+    bundle.images = logical_device.getSwapchainImagesKHR(bundle.swapchain);
+    bundle.format = format.format;
+    bundle.extent = extent;
+
+    if (DEBUG)
+    {
+        std::cout << "swapchain setup complete!\n";
+    }
+
+    return bundle;
+}
+
+//MAIN//
+
 int main()
 {
     //setup GLFW window
@@ -580,7 +967,12 @@ int main()
 
     //setup debug messanger
     vk::detail::DispatchLoaderDynamic dldi{instance, vkGetInstanceProcAddr};
-    vk::DebugUtilsMessengerEXT debug_messenger{setup_debug_messenger(instance, dldi)};
+    vk::DebugUtilsMessengerEXT debug_messenger{};
+    
+    if (DEBUG)
+    {
+        debug_messenger = setup_debug_messenger(instance, dldi);
+    }
 
     // setup surface
     VkSurfaceKHR c_style_surface;
@@ -593,11 +985,11 @@ int main()
 
     //setup device
     vk::PhysicalDevice physical_device{setup_physical_device(instance)};
-    queue_family_indices q_f_indices{setup_queue_families(physical_device, surface)};
-    vk::Device logical_device{setup_logical_device(physical_device, q_f_indices)};
-    std::array<vk::Queue,2> queues{setup_queues(logical_device, q_f_indices)};
-    vk::Queue graphics_queue = queues[0];
-    vk::Queue present_queue = queues[1];
+    queue_family_indices indices{setup_queue_families(physical_device, surface)};
+    vk::Device logical_device{setup_logical_device(physical_device, indices)};
+    std::array<vk::Queue, 2> queues{setup_queues(logical_device, indices)};
+    swapchain_bundle bundle{setup_swapchain(logical_device, physical_device, surface, indices, WINDOW_WIDTH, WINDOW_HEIGHT)};
+    vk::SwapchainKHR swapchain{bundle.swapchain};
 
     //RUNTIME LOOP//
 
@@ -625,9 +1017,13 @@ int main()
         std::cout << "cleanup in progress...\n";
     }
 
-    instance.destroyDebugUtilsMessengerEXT(debug_messenger, nullptr, dldi);
+    if (DEBUG)
+    {
+        instance.destroyDebugUtilsMessengerEXT(debug_messenger, nullptr, dldi);
+    }
 
     //vulkan cleanup
+    logical_device.destroySwapchainKHR(swapchain);
     logical_device.destroy();
     instance.destroySurfaceKHR(surface);
     instance.destroy();
