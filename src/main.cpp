@@ -35,13 +35,21 @@ struct swapchain_support_details
     std::vector<vk::PresentModeKHR> present_modes;
 };
 
+struct swapchain_frame
+{
+    vk::Image image;
+    vk::ImageView image_view;
+};
+
 struct swapchain_bundle
 {
     vk::SwapchainKHR swapchain;
-    std::vector<vk::Image> images;
+    std::vector<swapchain_frame> frames;
     vk::Format format;
     vk::Extent2D extent;
 };
+
+
 
 //CALLBACK FUNCTIONS//
 void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -902,7 +910,7 @@ swapchain_bundle setup_swapchain(vk::Device logical_device, vk::PhysicalDevice p
 
     uint32_t image_count = std::min(support.capabilities.maxImageCount, support.capabilities.minImageCount);
 
-    vk::SwapchainCreateInfoKHR create_info
+    vk::SwapchainCreateInfoKHR sc_create_info
     {
         vk::SwapchainCreateFlagsKHR(), 
         surface, 
@@ -918,40 +926,63 @@ swapchain_bundle setup_swapchain(vk::Device logical_device, vk::PhysicalDevice p
 
     if (indices.graphics_family.value() != indices.present_family.value())
     {
-        create_info.imageSharingMode = vk::SharingMode::eConcurrent;
-        create_info.queueFamilyIndexCount = 2;
-        create_info.pQueueFamilyIndices = q_f_indices;
+        sc_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+        sc_create_info.queueFamilyIndexCount = 2;
+        sc_create_info.pQueueFamilyIndices = q_f_indices;
     }
     else
     {
-        create_info.imageSharingMode = vk::SharingMode::eExclusive;
+        sc_create_info.imageSharingMode = vk::SharingMode::eExclusive;
     }
-    create_info.preTransform = support.capabilities.currentTransform;
-    create_info.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    create_info.presentMode = present_mode;
-    create_info.clipped = VK_TRUE;
+    sc_create_info.preTransform = support.capabilities.currentTransform;
+    sc_create_info.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    sc_create_info.presentMode = present_mode;
+    sc_create_info.clipped = VK_TRUE;
 
-    create_info.oldSwapchain = vk::SwapchainKHR(nullptr);
+    sc_create_info.oldSwapchain = vk::SwapchainKHR(nullptr);
 
     swapchain_bundle bundle{};
     try
     {
-        bundle.swapchain = logical_device.createSwapchainKHR(create_info);
+        bundle.swapchain = logical_device.createSwapchainKHR(sc_create_info);
     }
     catch(vk::SystemError err)
     {
         throw std::runtime_error("failed to create swapchain!");
     }
     
-    bundle.images = logical_device.getSwapchainImagesKHR(bundle.swapchain);
+    std::vector<vk::Image> images = logical_device.getSwapchainImagesKHR(bundle.swapchain);
+    bundle.frames.resize(images.size());
+
+    for(size_t i{}; i < images.size(); i++)
+    {
+        vk::ImageViewCreateInfo iv_create_info{};
+        iv_create_info.image = images[i];
+        iv_create_info.viewType = vk::ImageViewType::e2D;
+        iv_create_info.components.r = vk::ComponentSwizzle::eIdentity;
+        iv_create_info.components.g = vk::ComponentSwizzle::eIdentity;
+        iv_create_info.components.b = vk::ComponentSwizzle::eIdentity;
+        iv_create_info.components.a = vk::ComponentSwizzle::eIdentity;
+        iv_create_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        iv_create_info.subresourceRange.baseMipLevel = 0;
+        iv_create_info.subresourceRange.levelCount = 1; 
+        iv_create_info.subresourceRange.baseArrayLayer = 0;
+        iv_create_info.subresourceRange.layerCount = 1;
+        iv_create_info.format = format.format;
+
+        bundle.frames[i].image = images[i];
+        bundle.frames[i].image_view = logical_device.createImageView(iv_create_info);
+    }
+
     bundle.format = format.format;
     bundle.extent = extent;
+
+
 
     if (DEBUG)
     {
         std::cout << "swapchain setup complete!\n";
     }
-
     return bundle;
 }
 
@@ -990,7 +1021,7 @@ int main()
     std::array<vk::Queue, 2> queues{setup_queues(logical_device, indices)};
     swapchain_bundle bundle{setup_swapchain(logical_device, physical_device, surface, indices, WINDOW_WIDTH, WINDOW_HEIGHT)};
     vk::SwapchainKHR swapchain{bundle.swapchain};
-
+    std::vector<swapchain_frame> swapchain_frames{bundle.frames};
     //RUNTIME LOOP//
 
     if (DEBUG)
@@ -1023,6 +1054,11 @@ int main()
     }
 
     //vulkan cleanup
+    for (swapchain_frame frame : swapchain_frames)
+    {
+        logical_device.destroyImageView(frame.image_view);
+    }
+
     logical_device.destroySwapchainKHR(swapchain);
     logical_device.destroy();
     instance.destroySurfaceKHR(surface);
