@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <set>
+#include <fstream>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -49,7 +50,290 @@ struct swapchain_bundle
     vk::Extent2D extent;
 };
 
+struct graphics_pipeline_in_bundle
+{
+    vk::Device device;
+    std::string vertex_filepath;
+    std::string fragment_filepath;
+    vk::Extent2D swapchain_extent;
+    vk::Format swapchain_image_format;
+};
 
+struct graphics_pipeline_out_bundle
+{
+    vk::PipelineLayout layout;
+    vk::RenderPass renderpass;
+    vk::Pipeline pipeline;
+};
+
+std::vector<char> read_file(const std::string& filename)
+{
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open())
+    {
+        throw std::runtime_error("failed to open file!");
+    }
+
+    size_t file_size = (size_t)file.tellg();
+    std::vector<char> buffer(file_size);
+
+    file.seekg(0);
+    file.read(buffer.data(), file_size);
+
+    file.close();
+
+    return buffer;
+}
+
+vk::ShaderModule create_module(std::string filename, vk::Device device)
+{
+    std::vector<char> source_code{read_file(filename)};
+    vk::ShaderModuleCreateInfo module_info{};
+    module_info.flags = vk::ShaderModuleCreateFlags();
+    module_info.codeSize = source_code.size();
+    module_info.pCode = reinterpret_cast<const uint32_t*>(source_code.data());
+
+    try
+    {
+        return device.createShaderModule(module_info);
+    }
+    catch(vk::SystemError err)
+    {
+        std::cout << "failed to create shader module for \"" << filename << "\"" << std::endl;
+    }
+    return nullptr;
+}
+
+vk::PipelineLayout make_pipeline_layout(vk::Device device)
+{
+    vk::PipelineLayoutCreateInfo layout_info{};
+    layout_info.flags = vk::PipelineLayoutCreateFlags();
+    layout_info.setLayoutCount = 0;
+    layout_info.pushConstantRangeCount = 0;
+
+    try
+    {
+        return device.createPipelineLayout(layout_info);
+    }
+    catch(vk::SystemError err)
+    {
+        std::cout << "failed to create pipeline layout!" << std::endl;
+    }
+
+    return nullptr;
+}
+
+vk::RenderPass make_renderpass(vk::Device device, vk::Format swapchain_image_format)
+{
+    vk::AttachmentDescription color_attachment{};
+    color_attachment.flags = vk::AttachmentDescriptionFlags();
+    color_attachment.format = swapchain_image_format;
+    color_attachment.samples = vk::SampleCountFlagBits::e1;
+    color_attachment.loadOp = vk::AttachmentLoadOp::eClear;
+    color_attachment.storeOp = vk::AttachmentStoreOp::eStore;
+    color_attachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+    color_attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+    color_attachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+
+    vk::AttachmentReference color_attachment_ref{};
+    color_attachment_ref.attachment = 0;
+    color_attachment_ref.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+    vk::SubpassDescription subpass{};
+    subpass.flags = vk::SubpassDescriptionFlags();
+    subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &color_attachment_ref;
+
+    vk::RenderPassCreateInfo renderpass_info{};
+    renderpass_info.flags = vk::RenderPassCreateFlags();
+    renderpass_info.attachmentCount = 1;
+    renderpass_info.pAttachments = &color_attachment;
+    renderpass_info.subpassCount = 1;
+    renderpass_info.pSubpasses = &subpass;
+    try
+    {
+        return device.createRenderPass(renderpass_info);
+    }
+    catch(vk::SystemError err)
+    {
+        std::cout << "failed to create renderpass!" << std::endl;
+    }
+    return nullptr;
+}
+
+graphics_pipeline_out_bundle make_graphics_pipeline(graphics_pipeline_in_bundle specification)
+{
+    vk::GraphicsPipelineCreateInfo pipeline_info{};
+    pipeline_info.flags = vk::PipelineCreateFlags();
+
+    std::vector<vk::PipelineShaderStageCreateInfo> shader_stages;
+
+    // vertex input
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info{};
+    vertex_input_info.flags = vk::PipelineVertexInputStateCreateFlags();
+    vertex_input_info.vertexBindingDescriptionCount = 0;
+    vertex_input_info.vertexAttributeDescriptionCount = 0;
+    pipeline_info.pVertexInputState = &vertex_input_info;
+
+    // input assembly
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly_info{};
+    input_assembly_info.flags = vk::PipelineInputAssemblyStateCreateFlags();
+    input_assembly_info.topology = vk::PrimitiveTopology::eTriangleList;
+    pipeline_info.pInputAssemblyState = &input_assembly_info;
+
+    // vertex shader
+    if (DEBUG)
+    {
+        std::cout << "creating vertex shader module..." << std::endl;
+    }
+
+    vk::ShaderModule vertex_shader = create_module(specification.vertex_filepath, specification.device);
+    vk::PipelineShaderStageCreateInfo vertex_shader_info{};
+    vertex_shader_info.flags = vk::PipelineShaderStageCreateFlags();
+    vertex_shader_info.stage = vk::ShaderStageFlagBits::eVertex;
+    vertex_shader_info.module = vertex_shader;
+    vertex_shader_info.pName = "main";
+    shader_stages.push_back(vertex_shader_info);
+
+    if (DEBUG)
+    {
+        std::cout << "vertex shader module created!" << std::endl;
+    }
+
+    //viewport and scissor
+    vk::Viewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = specification.swapchain_extent.width;
+    viewport.height = specification.swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vk::Rect2D scissor{};
+    scissor.offset.x = 0.0f;
+    scissor.offset.y = 0.0f;
+    scissor.extent = specification.swapchain_extent;
+    vk::PipelineViewportStateCreateInfo viewport_state{};
+    viewport_state.flags = vk::PipelineViewportStateCreateFlags();
+    viewport_state.viewportCount = 1;
+    viewport_state.pViewports = &viewport;
+    viewport_state.scissorCount = 1;
+    viewport_state.pScissors = &scissor;
+    pipeline_info.pViewportState = &viewport_state;
+
+    //rasterizer
+    vk::PipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.flags = vk::PipelineRasterizationStateCreateFlags();
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = vk::PolygonMode::eFill;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+    rasterizer.frontFace = vk::FrontFace::eClockwise;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    pipeline_info.pRasterizationState = &rasterizer;
+
+    //fragment shader
+    if (DEBUG)
+    {
+        std::cout << "creating fragment shader module..." << std::endl;
+    }
+
+    vk::ShaderModule fragment_shader = create_module(specification.fragment_filepath, specification.device);
+    vk::PipelineShaderStageCreateInfo fragment_shader_info{};
+    fragment_shader_info.flags = vk::PipelineShaderStageCreateFlags();
+    fragment_shader_info.stage = vk::ShaderStageFlagBits::eFragment;
+    fragment_shader_info.module = fragment_shader;
+    fragment_shader_info.pName = "main";
+    shader_stages.push_back(fragment_shader_info);
+
+    if (DEBUG)
+    {
+        std::cout << "fragment shader module created!" << std::endl;
+    }
+    pipeline_info.stageCount = shader_stages.size();
+    pipeline_info.pStages = shader_stages.data();
+
+    //multisampling
+    vk::PipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.flags = vk::PipelineMultisampleStateCreateFlags();
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    pipeline_info.pMultisampleState = &multisampling;
+
+    //color blend
+    vk::PipelineColorBlendAttachmentState color_blend_attachment{};
+    color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+    color_blend_attachment.blendEnable = VK_FALSE;
+    vk::PipelineColorBlendStateCreateInfo color_blending{};
+    color_blending.flags = vk::PipelineColorBlendStateCreateFlags();
+    color_blending.logicOpEnable = VK_FALSE;
+    color_blending.logicOp = vk::LogicOp::eCopy;
+    color_blending.attachmentCount = 1;
+    color_blending.pAttachments = &color_blend_attachment;
+    color_blending.blendConstants[0] = 0.0f;
+    color_blending.blendConstants[1] = 0.0f;
+    color_blending.blendConstants[2] = 0.0f;
+    color_blending.blendConstants[3] = 0.0f;
+    pipeline_info.pColorBlendState = &color_blending;
+
+
+    //pipeline layout
+    if (DEBUG)
+    {
+        std::cout << "creating pipeline layout..." << std::endl;
+    }
+
+    vk::PipelineLayout layout{make_pipeline_layout(specification.device)};
+    pipeline_info.layout = layout;
+    
+    if (DEBUG)
+    {
+        std::cout << "pipeline layout created!" << std::endl;
+    }
+
+    //renderpass
+    if (DEBUG)
+    {
+        std::cout << "creating renderpass..." << std::endl;
+    }
+
+    vk::RenderPass renderpass{make_renderpass(specification.device, specification.swapchain_image_format)};
+    pipeline_info.renderPass = renderpass;
+    pipeline_info.subpass = 0;
+
+    if (DEBUG)
+    {
+        std::cout << "renderpass created!" << std::endl;
+    }
+
+    //extra stuff
+    pipeline_info.basePipelineHandle = nullptr;
+
+    //make the pipeline
+    if (DEBUG)
+    {
+        std::cout << "creating graphics pipeline..." << std::endl;
+    }
+
+    vk::Pipeline graphics_pipeline{specification.device.createGraphicsPipeline(nullptr, pipeline_info).value};
+
+    graphics_pipeline_out_bundle output{};
+    output.layout = layout;
+    output.renderpass = renderpass;
+    output.pipeline = graphics_pipeline;
+
+    if (DEBUG)
+    {
+        std::cout << "graphics pipeline created!" << std::endl;
+    }
+
+    specification.device.destroyShaderModule(vertex_shader);
+    specification.device.destroyShaderModule(fragment_shader);
+
+    return output;
+}
 
 //CALLBACK FUNCTIONS//
 void GLFW_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -887,7 +1171,7 @@ vk::Extent2D choose_swapchain_extent(uint32_t width, uint32_t height, vk::Surfac
         vk::Extent2D extent{width, height};
 
         extent.width = std::min(capabilities.maxImageExtent.width, std::max(capabilities.minImageExtent.width, width));
-        extent.height = std::min(capabilities.maxImageExtent.height, std::max(capabilities.minImageExtent.width, height));
+        extent.height = std::min(capabilities.maxImageExtent.height, std::max(capabilities.minImageExtent.height, height));
 
         return extent;
     }
@@ -908,7 +1192,7 @@ swapchain_bundle setup_swapchain(vk::Device logical_device, vk::PhysicalDevice p
     
     vk::Extent2D extent{choose_swapchain_extent(width, height, support.capabilities)};
 
-    uint32_t image_count = std::min(support.capabilities.maxImageCount, support.capabilities.minImageCount);
+    uint32_t image_count = std::min(support.capabilities.maxImageCount, support.capabilities.minImageCount + 1);
 
     vk::SwapchainCreateInfoKHR sc_create_info
     {
@@ -1019,9 +1303,29 @@ int main()
     queue_family_indices indices{setup_queue_families(physical_device, surface)};
     vk::Device logical_device{setup_logical_device(physical_device, indices)};
     std::array<vk::Queue, 2> queues{setup_queues(logical_device, indices)};
+    vk::Queue graphics_queue = queues[0];
+    vk::Queue present_queue = queues[1];
+
+    //setup swapchain
     swapchain_bundle bundle{setup_swapchain(logical_device, physical_device, surface, indices, WINDOW_WIDTH, WINDOW_HEIGHT)};
     vk::SwapchainKHR swapchain{bundle.swapchain};
     std::vector<swapchain_frame> swapchain_frames{bundle.frames};
+    vk::Format swapchain_format{bundle.format};
+    vk::Extent2D swapchain_extent{bundle.extent};
+
+    //setup pipeline
+
+    graphics_pipeline_in_bundle specification{};
+    specification.device = logical_device;
+    specification.vertex_filepath = "shaders/vert.spv";
+    specification.fragment_filepath = "shaders/frag.spv";
+    specification.swapchain_extent = swapchain_extent;
+    specification.swapchain_image_format = swapchain_format;
+
+    graphics_pipeline_out_bundle output{make_graphics_pipeline(specification)};
+    vk::PipelineLayout layout{output.layout};
+    vk::RenderPass renderpass{output.renderpass};
+    vk::Pipeline pipeline{output.pipeline};
     //RUNTIME LOOP//
 
     if (DEBUG)
@@ -1052,6 +1356,10 @@ int main()
     {
         instance.destroyDebugUtilsMessengerEXT(debug_messenger, nullptr, dldi);
     }
+
+    logical_device.destroyPipeline(pipeline);
+    logical_device.destroyPipelineLayout(layout);
+    logical_device.destroyRenderPass(renderpass);
 
     //vulkan cleanup
     for (swapchain_frame frame : swapchain_frames)
